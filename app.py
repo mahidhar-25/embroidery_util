@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, redirect, flash,url_for,jsoni
 import os
 from pyembroidery import read_dst, COLOR_CHANGE
 from PIL import Image, ImageDraw
+import time
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads/'  # Directory for uploaded files
@@ -114,38 +115,34 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
-        flash('No file part')
-        return redirect(request.url)
+        return jsonify({'error': 'No file part'}), 400
     
     files = request.files.getlist('file')
     
     uploaded_files = []
     for file in files:
         if file and allowed_file(file.filename):
-            filename = file.filename
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-
-            # Get stitch count and estimated colors
-            stitch_count, estimated_colors, output_image , output_color_image= convert_dst_to_image(filepath)
-
-            # Ensure the output image is correctly referenced
-            output_image_path = f'uploads/{os.path.basename(output_image)}'
-            output_color_image_path = f'uploads/{os.path.basename(output_color_image)}'
-            stich_hours = stitch_count / 20000 # type: ignore
+            filename = file.filename # type: ignore
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            
+            stitch_count, color_count, black_image_path, color_image_path = convert_dst_to_image(file_path)
+            
             if stitch_count is not None:
-                uploaded_files.append({
-                'filename': filename,
-                'stitch_count': stitch_count,
-                'colors': estimated_colors,
-                'image': output_image_path,
-                "hours": stich_hours,
-                'color_image': output_color_image_path  # Ensure this line correctly references the color image path
-            })
-        else:
-            flash(f'{file.filename} is not a valid DST file.')
+                file_data = {
+                    'filename': filename,
+                    'stitch_count': stitch_count,
+                    'colors': color_count,
+                    'hours': round(stitch_count / 20000, 3),
+                    'black_image': black_image_path,
+                    'color_image': color_image_path
+                }
+                uploaded_files.append(file_data)
     
-    return render_template('index.html', uploaded_files=uploaded_files)
+    if uploaded_files:
+        return jsonify(uploaded_files[0]), 200
+    else:
+        return jsonify({'error': 'No files uploaded or processing error'}), 400
 
 
 @app.route('/clear_history', methods=['POST'])
