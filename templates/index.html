@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Embroidery Design Tool</title>
+        <link
+            href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+            rel="stylesheet"
+        />
+        <style>
+            .dropzone {
+                border: 2px dashed #ccc;
+                border-radius: 8px;
+                padding: 20px;
+                text-align: center;
+                cursor: pointer;
+            }
+            .dropzone.dragover {
+                border-color: #000;
+                background-color: #f0f0f0;
+            }
+        </style>
+    </head>
+    <body class="bg-gray-100">
+        <div class="container mx-auto p-4">
+            <div class="bg-white rounded-lg shadow-lg p-6 sm:p-8 mb-6">
+                <h1 class="text-2xl font-bold mb-4">Embroidery Design Tool</h1>
+                <!-- Form with dropzone functionality -->
+                <form
+                    id="upload-form"
+                    action="{{ url_for('upload_file') }}"
+                    method="POST"
+                    enctype="multipart/form-data"
+                >
+                    <div id="dropzone" class="dropzone mb-6">
+                        <p class="mb-2 text-sm text-gray-500">
+                            Click to upload or drag and drop
+                        </p>
+                        <p class="text-xs text-gray-500">DST, dst</p>
+                        <input
+                            id="file-input"
+                            name="file"
+                            type="file"
+                            class="hidden"
+                            multiple
+                        />
+                    </div>
+                </form>
+
+                <!-- Clear History Button -->
+                <form action="{{ url_for('clear_history') }}" method="POST">
+                    <button
+                        type="submit"
+                        class="mt-4 bg-red-500 text-white py-2 px-4 rounded-lg"
+                    >
+                        Clear History
+                    </button>
+                </form>
+
+                <div class="mt-6">
+                    <h2 class="text-xl font-semibold mb-4">Uploaded Files</h2>
+                    <form id="file-form">
+                        <table class="table-auto w-full text-left">
+                            <thead>
+                                <tr>
+                                    <th class="px-2 py-2">Filename</th>
+                                    <th class="pe-2 py-2">Stitch Count</th>
+                                    <th class="pe-2 py-2">Color Count</th>
+                                    <th class="pe-2 py-2">Hours</th>
+                                    <th class="px-2 py-2">Input</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for file in uploaded_files %}
+                                <tr>
+                                    <td class="px-2 py-2">
+                                        {{ file.filename }}
+                                    </td>
+                                    <td class="pe-2 py-2 stitch-count">
+                                        {{ file.stitch_count }}
+                                    </td>
+                                    <td class="pe-2 py-2 stitch-count">
+                                        {{ file.colors }}
+                                    </td>
+                                    <td class="pe-2 py-2 hours"></td>
+                                    <td class="px-2 py-2">
+                                        <input
+                                            type="number"
+                                            name="input_{{ loop.index }}"
+                                            value="1"
+                                            min="1"
+                                            class="border border-gray-300 rounded-lg px-2 py-1"
+                                            style="width: 75px"
+                                            onchange="calculateTotal()"
+                                        />
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        <div class="mt-4">
+                            <div id="total-stitch-count" class="mt-6">
+                                <!-- Total stitch count and hours will be displayed here -->
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Section to display the generated images side by side -->
+            <div class="bg-white rounded-lg shadow-lg p-6 sm:p-8">
+                <h2 class="text-xl font-semibold mb-4">Generated Images</h2>
+                <div
+                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                >
+                    {% for file in uploaded_files %}
+                    <div class="flex flex-col items-center mb-4">
+                        <div class="w-full flex justify-center mb-4">
+                            {% if file.image %}
+                            <div class="w-1/2 pr-2">
+                                <h3 class="text-lg font-medium mb-2">
+                                    {{ file.filename }} - Black
+                                </h3>
+                                <img
+                                    src="{{ url_for('static', filename=file.image) }}"
+                                    alt="Generated Black Image"
+                                    class="border border-gray-300 rounded-lg shadow-md w-full h-auto object-contain"
+                                />
+                            </div>
+                            {% endif %} {% if file.color_image %}
+                            <div class="w-1/2 pl-2">
+                                <h3 class="text-lg font-medium mb-2">
+                                    {{ file.filename }} - Color
+                                </h3>
+                                <img
+                                    src="{{ url_for('static', filename=file.color_image) }}"
+                                    alt="Generated Colored Image"
+                                    class="border border-gray-300 rounded-lg shadow-md w-full h-auto object-contain"
+                                />
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function calculateTotal() {
+                let totalStitchCount = 0;
+                let totalHours = 0;
+
+                const table = document.querySelector("table");
+                const rows = table.querySelectorAll("tbody tr");
+
+                rows.forEach((row, index) => {
+                    const stitchCount = parseInt(
+                        row.querySelector(".stitch-count").textContent.trim(),
+                        10
+                    );
+                    const input = parseInt(
+                        row.querySelector(`input[name="input_${index + 1}"]`)
+                            .value,
+                        10
+                    );
+                    const calculatedStitches = stitchCount * input;
+                    const calculatedHours = (
+                        calculatedStitches / 20000
+                    ).toFixed(3);
+
+                    // Update the stitch count and hours in the table row
+                    row.querySelector(".stitch-count").textContent =
+                        calculatedStitches;
+                    row.querySelector(".hours").textContent = calculatedHours;
+
+                    totalStitchCount += calculatedStitches;
+                    totalHours += parseFloat(calculatedHours);
+                });
+
+                document.getElementById("total-stitch-count").innerHTML = `
+                <h3 class="text-xl font-semibold">Total Stitch Count:</h3>
+                <p class="text-lg">${totalStitchCount}</p>
+                <h3 class="text-xl font-semibold">Total Hours:</h3>
+                <p class="text-lg">${totalHours.toFixed(3)}</p>
+            `;
+            }
+
+            const dropzone = document.getElementById("dropzone");
+            const fileInput = document.getElementById("file-input");
+            const form = document.getElementById("upload-form");
+
+            dropzone.addEventListener("dragover", (event) => {
+                event.preventDefault();
+                dropzone.classList.add("dragover");
+            });
+
+            dropzone.addEventListener("dragleave", () => {
+                dropzone.classList.remove("dragover");
+            });
+
+            dropzone.addEventListener("drop", (event) => {
+                event.preventDefault();
+                dropzone.classList.remove("dragover");
+
+                const files = event.dataTransfer.files;
+                fileInput.files = files;
+                form.submit();
+            });
+
+            dropzone.addEventListener("click", () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener("change", () => {
+                form.submit();
+            });
+
+            window.addEventListener("load", calculateTotal);
+        </script>
+    </body>
+</html>
