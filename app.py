@@ -1,5 +1,5 @@
 import shutil
-from flask import Flask, render_template, request, redirect, flash,url_for
+from flask import Flask, render_template, request, redirect, flash,url_for,jsonify
 import os
 from pyembroidery import read_dst, COLOR_CHANGE
 from PIL import Image, ImageDraw
@@ -132,12 +132,14 @@ def upload_file():
             # Ensure the output image is correctly referenced
             output_image_path = f'uploads/{os.path.basename(output_image)}'
             output_color_image_path = f'uploads/{os.path.basename(output_color_image)}'
+            stich_hours = stitch_count / 20000 # type: ignore
             if stitch_count is not None:
                 uploaded_files.append({
                 'filename': filename,
                 'stitch_count': stitch_count,
                 'colors': estimated_colors,
                 'image': output_image_path,
+                "hours": stich_hours,
                 'color_image': output_color_image_path  # Ensure this line correctly references the color image path
             })
         else:
@@ -165,6 +167,36 @@ def clear_history():
 
     flash('History cleared successfully.')
     return redirect(url_for('index'))
+
+@app.route('/upload_single', methods=['POST'])
+def upload_single_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'})
+
+    file = request.files['file']
+    
+    if file and allowed_file(file.filename):
+        filename = file.filename
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+
+        stitch_count, estimated_colors, output_image, output_color_image = convert_dst_to_image(filepath)
+
+        if stitch_count is not None:
+            stich_hours = stitch_count / 20000  # type: ignore
+            uploaded_file_info = {
+                'filename': filename,
+                'stitch_count': stitch_count,
+                'colors': estimated_colors,
+                'image': f'uploads/{os.path.basename(output_image)}',
+                "hours": stich_hours,
+                'color_image': f'uploads/{os.path.basename(output_color_image)}'
+            }
+            return jsonify(uploaded_file_info)
+        else:
+            return jsonify({'error': 'Error processing file'})
+    else:
+        return jsonify({'error': f'{file.filename} is not a valid DST file.'})
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -80,16 +80,14 @@
                                     <td class="pe-2 py-2 stitch-count">
                                         {{ file.stitch_count }}
                                     </td>
-                                    <td class="pe-2 py-2 stitch-count">
-                                        {{ file.colors }}
-                                    </td>
-                                    <td class="pe-2 py-2 hours"></td>
+                                    <td class="pe-2 py-2">{{ file.colors }}</td>
+                                    <td class="pe-2 py-2">{{file.hours}}</td>
                                     <td class="px-2 py-2">
                                         <input
                                             type="number"
                                             name="input_{{ loop.index }}"
                                             value="1"
-                                            min="1"
+                                            min="0"
                                             class="border border-gray-300 rounded-lg px-2 py-1"
                                             style="width: 75px"
                                             onchange="calculateTotal()"
@@ -165,26 +163,26 @@
                             .value,
                         10
                     );
-                    const calculatedStitches = stitchCount * input;
-                    const calculatedHours = (
-                        calculatedStitches / 20000
-                    ).toFixed(3);
 
-                    // Update the stitch count and hours in the table row
-                    row.querySelector(".stitch-count").textContent =
-                        calculatedStitches;
-                    row.querySelector(".hours").textContent = calculatedHours;
+                    if (input > 0) {
+                        const calculatedStitches = stitchCount * input;
+                        const calculatedHours = (
+                            calculatedStitches / 20000
+                        ).toFixed(3);
 
-                    totalStitchCount += calculatedStitches;
-                    totalHours += parseFloat(calculatedHours);
+                        // Accumulate the total stitch count and hours
+                        totalStitchCount += calculatedStitches;
+                        totalHours += parseFloat(calculatedHours);
+                    }
                 });
 
+                // Display the total stitch count and hours without modifying the table rows
                 document.getElementById("total-stitch-count").innerHTML = `
-                <h3 class="text-xl font-semibold">Total Stitch Count:</h3>
-                <p class="text-lg">${totalStitchCount}</p>
-                <h3 class="text-xl font-semibold">Total Hours:</h3>
-                <p class="text-lg">${totalHours.toFixed(3)}</p>
-            `;
+        <h3 class="text-xl font-semibold">Total Stitch Count:</h3>
+        <p class="text-lg">${totalStitchCount}</p>
+        <h3 class="text-xl font-semibold">Total Hours:</h3>
+        <p class="text-lg">${totalHours.toFixed(3)}</p>
+    `;
             }
 
             const dropzone = document.getElementById("dropzone");
