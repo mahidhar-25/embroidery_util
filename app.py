@@ -1,15 +1,13 @@
 import shutil
-from flask import Flask, render_template, request, redirect, flash,url_for,jsonify
+from flask import Flask, render_template, request, jsonify
 import os
 from pyembroidery import read_dst, COLOR_CHANGE
 from PIL import Image, ImageDraw
-import time
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'static/uploads/'  # Directory for uploaded files
 app.secret_key = 'supersecretkey'
-user_selected_colors = ["#FF5733", "#33FF57","#cf2fd0", "#3357FF", "#FFD700" , "#000000" , "#30D02F" ,"#36C9B3" , "#946B87" ]
-
+user_selected_colors = ["#FF5733", "#33FF57", "#cf2fd0", "#3357FF", "#FFD700", "#000000", "#30D02F", "#36C9B3", "#946B87"]
 
 # Ensure the upload directory exists
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -30,8 +28,7 @@ def get_stitch_count(dst_file_path):
     
     return stitch_count, estimated_colors
 
-def convert_dst_to_image_color(dst_file_path,colors_count, selected_colors=user_selected_colors, output_format='PNG'):
-    selected_colors = selected_colors[:colors_count]
+def get_color_dst_images(dst_file_path, selected_colors=user_selected_colors, output_format='PNG'):
     design = read_dst(dst_file_path)
     
     # Calculate the design bounds
@@ -63,13 +60,9 @@ def convert_dst_to_image_color(dst_file_path,colors_count, selected_colors=user_
 
     return image
 
-def convert_dst_to_image(dst_file_path, output_format='PNG'):
+def get_black_dst_images(dst_file_path, output_format='PNG'):
     try:
         design = read_dst(dst_file_path)
-        estimated_colors = 1  # Start with one color
-        for stitch in design.stitches:
-            if stitch[2] == COLOR_CHANGE:
-                estimated_colors += 1
         
         # Determine size based on stitch coordinates
         min_x = min([stitch[0] for stitch in design.stitches])
@@ -92,20 +85,13 @@ def convert_dst_to_image(dst_file_path, output_format='PNG'):
                 draw.line((prev_x, prev_y, x, y), fill="black", width=1)
             prev_x, prev_y = x, y
             
-            
-        
         output_file_path = os.path.splitext(dst_file_path)[0] + '_black.png'
         image.save(output_file_path, output_format.upper())
         
-        # Create output file path with _black.png
-        
-        output_file_path_color = os.path.splitext(dst_file_path)[0] + '_color.png'
-        image_color = convert_dst_to_image_color(dst_file_path , estimated_colors)
-        image_color.save(output_file_path_color , output_format.upper())
-        return len(design.stitches), estimated_colors, output_file_path , output_file_path_color
+        return output_file_path 
     except Exception as e:
         print(f"Error processing file {dst_file_path}: {e}")
-        return None, None, None
+        return None
 
 @app.route('/')
 def index():
@@ -122,11 +108,11 @@ def upload_file():
     uploaded_files = []
     for file in files:
         if file and allowed_file(file.filename):
-            filename = file.filename # type: ignore
+            filename = file.filename
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
             
-            stitch_count, color_count, black_image_path, color_image_path = convert_dst_to_image(file_path)
+            stitch_count, color_count = get_stitch_count(file_path)
             
             if stitch_count is not None:
                 file_data = {
@@ -134,8 +120,6 @@ def upload_file():
                     'stitch_count': stitch_count,
                     'colors': color_count,
                     'hours': round(stitch_count / 20000, 3),
-                    'black_image': black_image_path,
-                    'color_image': color_image_path
                 }
                 uploaded_files.append(file_data)
     
@@ -144,6 +128,41 @@ def upload_file():
     else:
         return jsonify({'error': 'No files uploaded or processing error'}), 400
 
+@app.route('/generate_black_image/<filename>', methods=['GET'])
+def generate_black_image(filename):
+    if allowed_file(filename):
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        if os.path.exists(filepath):
+            output_image_path = get_black_dst_images(filepath)
+            
+            if output_image_path:
+                return jsonify({'image_path': f'uploads/{os.path.basename(output_image_path)}'}), 200
+            else:
+                return jsonify({'error': 'Error generating black and white image'}), 500
+        else:
+            return jsonify({'error': 'File not found'}), 404
+    else:
+        return jsonify({'error': f'{filename} is not a valid DST file.'}), 400
+
+@app.route('/generate_color_image/<filename>', methods=['GET'])
+def generate_color_image(filename):
+    if allowed_file(filename):
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        if os.path.exists(filepath):
+            image = get_color_dst_images(filepath)
+            
+            if image:
+                output_image_path = os.path.splitext(filepath)[0] + '_color.png'
+                image.save(output_image_path)
+                return jsonify({'image_path': output_image_path}), 200
+            else:
+                return jsonify({'error': 'Error generating color image'}), 500
+        else:
+            return jsonify({'error': 'File not found'}), 404
+    else:
+        return jsonify({'error': f'{filename} is not a valid DST file.'}), 400
 
 @app.route('/clear_history', methods=['POST'])
 def clear_history():
@@ -159,41 +178,9 @@ def clear_history():
                 shutil.rmtree(file_path)
         except Exception as e:
             print(f'Failed to delete {file_path}. Reason: {e}')
-            flash('An error occurred while clearing history.')
-            return redirect(url_for('index'))
+            return jsonify({'error': 'An error occurred while clearing history.'}), 500
 
-    flash('History cleared successfully.')
-    return redirect(url_for('index'))
-
-@app.route('/upload_single', methods=['POST'])
-def upload_single_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'})
-
-    file = request.files['file']
-    
-    if file and allowed_file(file.filename):
-        filename = file.filename
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-
-        stitch_count, estimated_colors, output_image, output_color_image = convert_dst_to_image(filepath)
-
-        if stitch_count is not None:
-            stich_hours = stitch_count / 20000  # type: ignore
-            uploaded_file_info = {
-                'filename': filename,
-                'stitch_count': stitch_count,
-                'colors': estimated_colors,
-                'image': f'uploads/{os.path.basename(output_image)}',
-                "hours": stich_hours,
-                'color_image': f'uploads/{os.path.basename(output_color_image)}'
-            }
-            return jsonify(uploaded_file_info)
-        else:
-            return jsonify({'error': 'Error processing file'})
-    else:
-        return jsonify({'error': f'{file.filename} is not a valid DST file.'})
+    return jsonify({'message': 'History cleared successfully.'}), 200
 
 if __name__ == "__main__":
     app.run(debug=True)

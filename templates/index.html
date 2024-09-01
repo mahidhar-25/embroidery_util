@@ -20,13 +20,16 @@
                 border-color: #000;
                 background-color: #f0f0f0;
             }
+            .hidden {
+                display: none;
+            }
         </style>
     </head>
     <body class="bg-gray-100">
         <div class="container mx-auto p-4">
+            <!-- Form with dropzone functionality -->
             <div class="bg-white rounded-lg shadow-lg p-6 sm:p-8 mb-6">
                 <h1 class="text-2xl font-bold mb-4">Embroidery Design Tool</h1>
-                <!-- Form with dropzone functionality -->
                 <form
                     id="upload-form"
                     action="{{ url_for('upload_file') }}"
@@ -48,15 +51,19 @@
                     </div>
                 </form>
 
-                <!-- Clear History Button -->
-                <form action="{{ url_for('clear_history') }}" method="POST">
+                <b
+                    >To get appropriate result before starting click clear
+                    history button below</b
+                >
+                <div>
                     <button
                         type="submit"
                         class="mt-4 bg-red-500 text-white py-2 px-4 rounded-lg"
+                        id="clearHistoryButton"
                     >
                         Clear History
                     </button>
-                </form>
+                </div>
 
                 <div class="mt-6">
                     <h2 class="text-xl font-semibold mb-4">Uploaded Files</h2>
@@ -70,7 +77,10 @@
             <!-- Section to display the generated images side by side -->
             <div class="bg-white rounded-lg shadow-lg p-6 sm:p-8">
                 <h2 class="text-xl font-semibold mb-4">Generated Images</h2>
+                <div id="color_images"></div>
+                <div id="black_images"></div>
                 <div
+                    id="images-container"
                     class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
                 >
                     <!-- Images will be dynamically populated here -->
@@ -79,12 +89,42 @@
         </div>
 
         <script>
+            // Run clearHistory function when the page loads
+
+            async function clearHistory() {
+                try {
+                    const response = await fetch("/clear_history", {
+                        method: "POST",
+                    });
+
+                    if (response.ok) {
+                        window.location.href = "/";
+                    } else {
+                        const errorData = await response.json();
+                        console.error(
+                            "Error clearing history:",
+                            errorData.error
+                        );
+                    }
+                } catch (error) {
+                    console.error("Error during clear history request:", error);
+                }
+            }
+
+            // Example: Call clearHistory when the button is clicked
+            document
+                .getElementById("clearHistoryButton")
+                .addEventListener("click", clearHistory);
+
             const dropzone = document.getElementById("dropzone");
             const fileInput = document.getElementById("file-input");
             const form = document.getElementById("upload-form");
             const uploadedFilesTable = document.getElementById(
                 "uploaded-files-table"
             );
+            const imagesContainer = document.getElementById("images-container");
+            const viewAllImagesButton =
+                document.getElementById("view-all-images");
 
             dropzone.addEventListener("dragover", (event) => {
                 event.preventDefault();
@@ -98,7 +138,6 @@
             dropzone.addEventListener("drop", (event) => {
                 event.preventDefault();
                 dropzone.classList.remove("dragover");
-
                 const files = event.dataTransfer.files;
                 handleFiles(files);
             });
@@ -130,7 +169,6 @@
                     if (response.ok) {
                         const result = await response.json();
                         addFileToTable(result);
-                        addImagesToPage(result);
                     } else {
                         console.error("Error uploading file:", file.name);
                     }
@@ -144,72 +182,76 @@
 
                 if (!table) {
                     uploadedFilesTable.innerHTML = `
-                    <table class="table-auto w-full text-left">
-                        <thead>
-                            <tr>
-                                <th class="px-2 py-2">Filename</th>
-                                <th class="pe-2 py-2">Stitch Count</th>
-                                <th class="pe-2 py-2">Color Count</th>
-                                <th class="pe-2 py-2">Hours</th>
-                                <th class="px-2 py-2">Input</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>`;
+                <table class="table-auto w-full text-left">
+                    <thead>
+                        <tr>
+                            <th class="px-2 py-2">Filename</th>
+                            <th class="px-2 py-2">Stitch Count</th>
+                            <th class="px-2 py-2">Color Count</th>
+                            <th class="px-2 py-2">Hours</th>
+                            <th class="px-2 py-2">Input</th>
+                            <th class="px-2 py-2">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>`;
                 }
 
                 const tbody = uploadedFilesTable.querySelector("tbody");
                 const row = document.createElement("tr");
 
                 row.innerHTML = `
-                <td class="px-2 py-2">${file.filename}</td>
-                <td class="pe-2 py-2 stitch-count">${file.stitch_count}</td>
-                <td class="pe-2 py-2">${file.colors}</td>
-                <td class="pe-2 py-2">${file.hours}</td>
-                <td class="px-2 py-2">
-                    <input type="number" name="input_${
-                        tbody.children.length + 1
-                    }" value="1" min="0"
-                        class="border border-gray-300 rounded-lg px-2 py-1" style="width: 75px"
-                        onchange="calculateTotal()" />
-                </td>`;
+            <td class="px-2 py-2">${file.filename}</td>
+            <td class="px-2 py-2 stitch-count">${file.stitch_count}</td>
+            <td class="px-2 py-2">${file.colors}</td>
+            <td class="px-2 py-2">${file.hours}</td>
+            <td class="px-2 py-2">
+                <input type="number" name="input_${
+                    tbody.children.length + 1
+                }" value="1" min="0"
+                    class="border border-gray-300 rounded-lg px-2 py-1" style="width: 75px"
+                    onchange="calculateTotal()" />
+            </td>
+            <td class="px-2 py-2">
+                <button onclick="loadImage('${
+                    file.filename
+                }')" class="bg-blue-500 text-white py-1 px-2 rounded-lg">View Image</button>
+            </td>`;
 
                 tbody.appendChild(row);
                 calculateTotal();
             }
 
             function addImagesToPage(file) {
-                console.log(file);
-                const imageContainer = document.querySelector(".grid");
                 const imageRow = document.createElement("div");
                 imageRow.className = "flex flex-col items-center mb-4";
 
                 imageRow.innerHTML = `
-                <div class="w-full flex justify-center mb-4">
-                    ${
-                        file.black_image
-                            ? `
-                    <div class="w-1/2 pr-2">
-                        <h3 class="text-lg font-medium mb-2">${file.filename} - Black</h3>
-                        <img src="${file.black_image}" alt="Generated Black Image"
-                            class="border border-gray-300 rounded-lg shadow-md w-full h-auto object-contain" />
-                    </div>`
-                            : ""
-                    }
-                    ${
-                        file.color_image
-                            ? `
-                    <div class="w-1/2 pl-2">
-                        <h3 class="text-lg font-medium mb-2">${file.filename} - Color</h3>
-                        <img src="${file.color_image}" alt="Generated Colored Image"
-                            class="border border-gray-300 rounded-lg shadow-md w-full h-auto object-contain" />
-                    </div>`
-                            : ""
-                    }
-                </div>
-            `;
+        <div class="w-full flex justify-center mb-4">
+            ${
+                file.black_image
+                    ? `
+            <div class="w-1/2 pr-2 ${file.filename}">
+                <h3 class="text-lg font-medium mb-2">${file.filename} - Black</h3>
+                <img src="${file.black_image}" alt="Generated Black Image"
+                    class="border border-gray-300 rounded-lg shadow-md w-full h-auto object-contain" />
+            </div>`
+                    : ""
+            }
+            ${
+                file.color_image
+                    ? `
+            <div class="w-1/2 pl-2 ${file.filename}">
+                <h3 class="text-lg font-medium mb-2">${file.filename} - Color</h3>
+                <img src="${file.color_image}" alt="Generated Colored Image"
+                    class="border border-gray-300 rounded-lg shadow-md w-full h-auto object-contain" />
+            </div>`
+                    : ""
+            }
+        </div>
+    `;
 
-                imageContainer.appendChild(imageRow);
+                imagesContainer.appendChild(imageRow);
             }
 
             function calculateTotal() {
@@ -244,14 +286,36 @@
 
                 // Display the total stitch count and hours without modifying the table rows
                 document.getElementById("total-stitch-count").innerHTML = `
-                <h3 class="text-xl font-semibold">Total Stitch Count:</h3>
-                <p class="text-lg">${totalStitchCount}</p>
-                <h3 class="text-xl font-semibold">Total Hours:</h3>
-                <p class="text-lg">${totalHours.toFixed(3)}</p>
-            `;
+            <h3 class="text-xl font-semibold">Total Stitch Count:</h3>
+            <p class="text-lg">${totalStitchCount}</p>
+            <h3 class="text-xl font-semibold">Total Hours:</h3>
+            <p class="text-lg">${totalHours.toFixed(2)}</p>`;
             }
 
-            window.addEventListener("load", calculateTotal);
+            async function loadImage(filename) {
+                try {
+                    // Correct API endpoint to generate the image
+                    const response = await fetch(
+                        `/generate_color_image/${filename}`,
+                        {
+                            method: "GET",
+                        }
+                    );
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        console.log(result);
+                        addImagesToPage({
+                            filename,
+                            color_image: result.image_path,
+                        });
+                    } else {
+                        console.error("Error generating image:", filename);
+                    }
+                } catch (error) {
+                    console.error("Error during image generation:", error);
+                }
+            }
         </script>
     </body>
 </html>
